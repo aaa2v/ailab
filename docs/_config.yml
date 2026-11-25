@@ -1,0 +1,6 @@
+title: 춘천마이스 AI 내비게이터
+description: 춘천 축제 맞춤 코스를 대화로 추천하는 웹 서비스 (팀 폴라포)
+lang: ko
+markdown: kramdown
+kramdown:
+  input: GFM

@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>춘천마이스 AI 내비게이터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: 친절한 호반 도시 안내소. 짧고 또렷한 문장.
+   IDEA: 접어 들고 다니는 관광 안내 지도 + 하루 일정표.
+   PICTURE: 의암호·소양강이 흐르는 춘천 개략 지도 위에 번호 동선.
+   COLOUR and TYPE: 호수 청록(주), 물안개(보조), 닭갈비 주홍(강조) / IBM Plex Sans KR.
+   LAYOUT: 상단 내비, 청록 히어로 띠, 채팅|코스 두 칸, 모바일은 한 줄로 쌓기. */
+:root{color-scheme:light dark;
+--bg:light-dark(#ffffff,#0c1a1e);--ink:light-dark(#12262c,#e6efee);--muted:light-dark(#566b70,#9db2b4);
+--lake:light-dark(#0b6e78,#2fa4ad);--deep:light-dark(#0a4f57,#0f343a);--mist:light-dark(#eaf3f2,#14292e);
+--card:light-dark(#ffffff,#112328);--line:light-dark(#d3e2e1,#24424a);--accent:light-dark(#d9482f,#ff7c5f);
+--land:light-dark(#f4f1e8,#16282c);--water:light-dark(#9fd3d6,#1f5961)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;overflow-x:clip}
+h1,h2,h3{line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:clamp(32px,5vw,50px);font-weight:700}h2{font-size:clamp(24px,3vw,32px);font-weight:700}h3{font-size:18px;font-weight:600}
+a{color:var(--lake)}button,input,select{font:inherit}
+button{cursor:pointer;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:0 16px}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.band{padding:clamp(28px,4vw,56px) max(5vw,16px)}.wrap{max-width:1240px;margin:0 auto}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px max(5vw,16px)}
+.logo{font-weight:700;font-size:18px;color:var(--ink);text-decoration:none;margin-right:auto;display:flex;align-items:center;gap:8px}
+.logo i{width:22px;height:22px;border-radius:50%;background:var(--lake);box-shadow:inset -6px -4px 0 var(--accent)}
+.nav{display:flex;gap:4px;flex-wrap:wrap}.nav a{padding:10px 12px;border-radius:8px;text-decoration:none;color:var(--ink);font-weight:500}
+.nav a[aria-current=page]{background:var(--mist);color:var(--lake)}
+.pill{font-size:13px;padding:4px 10px;border-radius:99px;background:var(--mist);color:var(--muted);white-space:nowrap}
+.pill.on{color:var(--lake);font-weight:600}
+.hero{background:var(--deep);color:#f1f8f7}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:clamp(20px,4vw,48px);align-items:center}
+.hero p{color:#cfe6e4;max-width:34em}
+.ask{display:flex;gap:8px;margin:20px 0 12px}.ask input{flex:1;min-height:52px;border-radius:12px;border:0;padding:0 16px;font-size:16px;background:#fff;color:#12262c}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:40px;border-radius:99px;padding:0 14px;font-size:15px;background:var(--mist);border:1px solid var(--line);color:var(--ink)}
+.hero .chip{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#fff}
+.chip[aria-pressed=true]{background:var(--lake);border-color:var(--lake);color:#fff}
+.mapbox{background:var(--land);border-radius:18px;padding:8px;position:relative}
+.mapbox svg{display:block;width:100%;height:auto}
+.mapcap{font-size:13px;color:var(--muted);margin:6px 4px 0}
+.hero .mapcap{color:#a9cdca}
+.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:6px}
+.card .meta{font-size:14px;color:var(--muted)}
+.tag{display:inline-block;font-size:13px;padding:2px 8px;border-radius:6px;background:var(--mist);color:var(--lake);font-weight:600;margin-right:4px}
+.tag.out{color:var(--accent)}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-top:20px;padding:0;list-style:none;counter-reset:s}
+.steps li{counter-increment:s;padding-left:52px;position:relative}
+.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:38px;height:38px;border-radius:50%;background:var(--lake);color:#fff;display:grid;place-items:center;font-weight:700}
+.note{font-size:14px;color:var(--muted)}
+.chatgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:24px;align-items:start}
+.chat{border:1px solid var(--line);border-radius:16px;display:flex;flex-direction:column;height:min(78vh,760px);background:var(--card)}
+.log{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:88%;padding:10px 14px;border-radius:14px;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere}
+.msg.u{align-self:flex-end;background:var(--lake);color:#fff;border-bottom-right-radius:4px}
+.msg.a{align-self:flex-start;background:var(--mist);border-bottom-left-radius:4px}
+.msg.a .chips{margin-top:10px}
+.msg .src{display:block;font-size:12px;color:var(--muted);margin-top:6px}
+.compose{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+.compose input{flex:1;min-height:48px;border-radius:10px;border:1px solid var(--line);padding:0 14px;font-size:16px;background:var(--bg);color:var(--ink)}
+.cond{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.cond b{color:var(--ink);font-weight:600}
+.course{display:flex;flex-direction:column;gap:16px}
+.empty{border:2px dashed var(--line);border-radius:16px;padding:32px;text-align:center;color:var(--muted)}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.tl .t{font-size:24px;font-weight:700;color:var(--lake);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tl .n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:700;margin-right:6px;vertical-align:2px}
+.tl .r{color:var(--muted);font-size:15px}
+.tl .mv{font-size:13px;color:var(--muted);margin-top:4px}
+.tl li.changed{background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 12%,transparent),transparent)}
+.warn{color:var(--accent);font-size:14px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.filters{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:16px 0}
+.flist{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:start}
+.detail{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:start}
+table{border-collapse:collapse;width:100%;font-size:15px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:14px}td.num{white-space:nowrap;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+.dots{display:inline-flex;gap:4px}.dots i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:b 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes b{50%{opacity:.25}}
+.route{stroke-dasharray:6 6;animation:dash 1.2s linear infinite}@keyframes dash{to{stroke-dashoffset:-12}}
+@media(prefers-reduced-motion:reduce){.route,.dots i{animation:none}}
+[hidden]{display:none!important}
+@media(max-width:900px){.chatgrid,.flist,.detail{grid-template-columns:minmax(0,1fr)}.chat{height:70vh}}
+@media(max-width:600px){.hero .wrap{grid-template-columns:minmax(0,1fr)}.ask{flex-direction:column}.tl li{grid-template-columns:58px minmax(0,1fr)}.tl .t{font-size:20px}.nav a{padding:8px}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="logo" href="#home"><i aria-hidden="true"></i>춘천마이스 AI 내비게이터</a>
+  <nav class="nav" aria-label="주 메뉴">
+    <a href="#home" data-r="home">홈</a><a href="#chat" data-r="chat">코스 추천</a><a href="#festivals" data-r="festivals">축제·행사</a>
+  </nav>
+  <span id="mode" class="pill">추천 엔진 확인 중</span>
+</div></header>
+
+<main>
+<section id="v-home" data-view>
+  <div class="hero band"><div class="wrap">
+    <div>
+      <h1>말 한마디로 짜는<br>춘천 축제 하루 코스</h1>
+      <p>언제, 누구와, 무엇을 좋아하는지 말해 주세요. 그날 열리는 행사와 근처 식당·카페·전통시장을 묶어 시간대별 동선으로 짜 드립니다.</p>
+      <form class="ask" id="homeAsk"><label for="homeQ" hidden>질문</label>
+        <input id="homeQ" placeholder="예: 이번 토요일에 아이 둘이랑 차 타고 가요" autocomplete="off">
+        <button class="primary" type="submit">코스 짜기</button></form>
+      <div class="chips" id="homeChips"></div>
+    </div>
+    <div><div class="mapbox"><svg id="heroMap" viewBox="0 0 600 600" role="img" aria-label="춘천 개략 지도와 예시 동선"></svg></div>
+      <p class="mapcap">춘천 개략도 · 위치는 대략적인 표시입니다</p></div>
+  </div></div>
+  <div class="band"><div class="wrap">
+    <h2>이번 주에 열리는 행사</h2>
+    <div class="grid3" id="weekList"></div>
+  </div></div>
+  <div class="band" style="background:var(--mist)"><div class="wrap">
+    <h2>이렇게 추천해요</h2>
+    <ol class="steps">
+      <li><h3>조건 파악</h3>대화에서 날짜·동행자·관심사·이동 수단을 읽고, 빠진 것만 한 번에 물어봅니다.</li>
+      <li><h3>행사·매장 검색</h3>그날 운영하는 프로그램과 주변 1km 안의 식당·카페·시장을 데이터에서 찾습니다.</li>
+      <li><h3>코스 구성·검증</h3>운영 시간과 이동 시간을 계산해 겹치지 않는 코스만 보여 줍니다. 데이터에 없는 장소는 추천하지 않습니다.</li>
+    </ol>
+  </div></div>
+</section>
+
+<section id="v-chat" data-view hidden><div class="band"><div class="wrap">
+  <div class="chatgrid">
+    <div class="chat">
+      <div class="cond" id="cond" aria-live="polite"></div>
+      <div class="log" id="log" aria-live="polite"></div>
+      <form class="compose" id="chatForm"><label for="chatQ" hidden>메시지</label>
+        <input id="chatQ" placeholder="조건을 말하거나 코스를 바꿔 달라고 해 보세요" autocomplete="off">
+        <button class="primary" type="submit" id="sendBtn">보내기</button>
+        <button type="button" id="stopBtn" hidden>중지</button></form>
+    </div>
+    <div class="course" id="coursePanel"></div>
+  </div>
+</div></div></section>
+
+<section id="v-festivals" data-view hidden><div class="band"><div class="wrap">
+  <h2>춘천 축제·행사</h2>
+  <div class="filters">
+    <div class="chips" id="fPeriod" role="group" aria-label="기간"></div>
+    <div class="chips" id="fCat" role="group" aria-label="카테고리"></div>
+    <label><input type="checkbox" id="fIndoor"> 실내 행사만</label>
+  </div>
+  <div class="flist"><div id="fList" class="course"></div>
+    <div><div class="mapbox"><svg id="fMap" viewBox="0 0 600 600" role="img" aria-label="행사 위치 지도"></svg></div><p class="mapcap">번호는 왼쪽 목록 순서입니다 · 개략도</p></div></div>
+</div></div></section>
+
+<section id="v-detail" data-view hidden><div class="band"><div class="wrap" id="detail"></div></div></section>
+</main>
+
+<footer class="band"><div class="wrap">
+  <p><b>시연용 샘플 데이터 안내</b> · 장소 이름과 위치는 춘천의 실제 장소를 대략적으로 표시했지만, 행사 일정·프로그램·요금과 매장 이름은 모두 시연을 위해 만든 가상 데이터입니다. 실제 방문 전에는 각 기관의 공식 안내를 확인하세요.</p>
+  <p>팀 폴라포 · My AI 랩 프로젝트 · <a href="https://github.com/aaa2v/ailab">GitHub 저장소</a></p>
+</div></footer>
+
+<script>
+{
+/* ---------- 유틸 ---------- */
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const parseYmd = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const toMin = s => { const [h, m] = String(s).split(':').map(Number); return h * 60 + (m || 0); };
+const toHM = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+const fmtDate = s => { const d = parseYmd(s); return `${d.getMonth() + 1}월 ${d.getDate()}일(${DOW[d.getDay()]})`; };
+const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
+const T = ymd(TODAY);
+
+/* ---------- 데이터 (장소는 실제, 행사·매장은 시연용 가상) ---------- */
+const CAT = { performance: '공연', experience: '체험', food: '먹거리', exhibition: '전시', scenery: '풍경·야경' };
+const VENUES = {
+  v1: { name: '공지천 일원', lat: 37.8716, lng: 127.7105 },
+  v2: { name: '춘천인형극장', lat: 37.8952, lng: 127.7072 },
+  v3: { name: '애니메이션박물관', lat: 37.8615, lng: 127.6893 },
+  v4: { name: '막국수체험박물관', lat: 37.9262, lng: 127.7644 },
+  v5: { name: '국립춘천박물관', lat: 37.8646, lng: 127.7497 },
+  v6: { name: '춘천문화예술회관', lat: 37.8735, lng: 127.7405 },
+  v7: { name: '소양강스카이워크', lat: 37.8934, lng: 127.7218 },
+  v8: { name: '김유정문학촌', lat: 37.8166, lng: 127.8131 },
+  v9: { name: '춘천중앙시장(낭만시장)', lat: 37.8812, lng: 127.7283 },
+  v10: { name: '명동 거리', lat: 37.8801, lng: 127.7262 }
+};
+const rel = n => ymd(addDays(TODAY, n));
+const EVENTS = [
+  { id: 'e1', name: '호반 겨울 불빛 산책', cat: ['scenery'], venue: 'v1', start: rel(-12), end: rel(45), indoor: false, fee: '무료', summary: '공지천 산책로를 따라 빛 조형물을 설치한 야간 산책 행사입니다.' },
+  { id: 'e2', name: '인형극장 겨울 가족 공연', cat: ['performance'], venue: 'v2', start: rel(-20), end: rel(60), indoor: true, fee: '어린이 5,000원 · 성인 7,000원', summary: '어린이와 가족을 위한 인형극을 주말과 수요일에 상설 공연합니다.' },
+  { id: 'e3', name: '애니메이션 체험 주간', cat: ['experience'], venue: 'v3', start: rel(-5), end: rel(30), indoor: true, fee: '체험 1회 8,000원', summary: '클레이 캐릭터 만들기와 짧은 애니메이션 찍기 체험을 운영합니다. 월요일 휴관.' },
+  { id: 'e4', name: '메밀 막국수 만들기 체험', cat: ['experience', 'food'], venue: 'v4', start: rel(-30), end: rel(90), indoor: true, fee: '1인 10,000원', summary: '메밀 반죽부터 면 뽑기까지 직접 막국수를 만들어 먹는 체험입니다. 월요일 휴관.' },
+  { id: 'e5', name: '박물관 겨울 기획전', cat: ['exhibition'], venue: 'v5', start: rel(-40), end: rel(70), indoor: true, fee: '무료', summary: '강원의 겨울 생활 문화를 다룬 기획 전시와 정시 해설을 운영합니다. 월요일 휴관.' },
+  { id: 'e6', name: '연말 실내악 음악회', cat: ['performance'], venue: 'v6', start: rel(2), end: rel(35), indoor: true, fee: '전석 20,000원', summary: '금·토요일 저녁에 열리는 연말 실내악 공연입니다.' },
+  { id: 'e7', name: '소양강 스카이워크 산책', cat: ['scenery'], venue: 'v7', start: rel(-365), end: rel(365), indoor: false, fee: '2,000원(춘천사랑상품권 환급)', summary: '소양강 위 투명 유리 산책로를 걷는 상시 관광 코스입니다.' },
+  { id: 'e8', name: '김유정 이야기 마당', cat: ['experience', 'exhibition'], venue: 'v8', start: rel(-15), end: rel(50), indoor: false, fee: '무료', summary: '작품 속 길을 걷는 해설 탐방과 실내 전통 놀이 체험을 운영합니다.' },
+  { id: 'e9', name: '낭만시장 주말 먹거리 장터', cat: ['food'], venue: 'v9', start: rel(-60), end: rel(60), indoor: false, fee: '자유 이용', summary: '주말마다 시장 안 광장에서 지역 먹거리 장터가 열립니다.' },
+  { id: 'e10', name: '명동 주말 버스킹 무대', cat: ['performance'], venue: 'v10', start: rel(-10), end: rel(40), indoor: false, fee: '무료', summary: '토·일요일 오후 명동 거리에서 청년 공연팀이 버스킹 무대를 엽니다.' }
+];
+const ALL = [0, 1, 2, 3, 4, 5, 6], NOMON = [0, 2, 3, 4, 5, 6], WKND = [0, 6];
+// 고정 시간 프로그램: times / 자유 입장 프로그램: win
+const TPL = [
+  { id: 'p1', ev: 'e1', name: '불빛 터널 개방', days: ALL, win: ['17:30', '21:30'], dur: 50, target: 'all' },
+  { id: 'p2', ev: 'e1', name: '빛 조형물 해설 산책', days: WKND, times: ['18:30'], dur: 40, target: 'all' },
+  { id: 'p3', ev: 'e2', name: '가족 인형극 공연', days: [0, 3, 6], times: ['11:00', '14:00'], dur: 50, target: 'kids' },
+  { id: 'p4', ev: 'e3', name: '클레이 캐릭터 만들기', days: NOMON, times: ['10:30', '13:30', '15:30'], dur: 60, target: 'kids' },
+  { id: 'p5', ev: 'e3', name: '애니메이션 전시 관람', days: NOMON, win: ['10:00', '18:00'], dur: 50, target: 'all' },
+  { id: 'p6', ev: 'e4', name: '막국수 만들기 체험', days: NOMON, times: ['11:00', '14:00'], dur: 70, target: 'all', meal: true },
+  { id: 'p7', ev: 'e5', name: '기획전 정시 해설', days: NOMON, times: ['11:00', '14:00', '16:00'], dur: 50, target: 'all' },
+  { id: 'p8', ev: 'e5', name: '기획전 자유 관람', days: NOMON, win: ['10:00', '18:00'], dur: 50, target: 'all' },
+  { id: 'p9', ev: 'e6', name: '연말 실내악 공연', days: [5, 6], times: ['19:30'], dur: 90, target: 'adult' },
+  { id: 'p10', ev: 'e7', name: '스카이워크 걷기', days: ALL, win: ['10:00', '21:00'], dur: 40, target: 'all' },
+  { id: 'p11', ev: 'e8', name: '작품 속 길 해설 탐방', days: WKND, times: ['11:00', '14:00'], dur: 60, target: 'all', out: true },
+  { id: 'p12', ev: 'e8', name: '전통 놀이 체험', days: NOMON, times: ['13:00', '15:00'], dur: 50, target: 'kids', indoor: true },
+  { id: 'p13', ev: 'e9', name: '주말 먹거리 장터', days: WKND, win: ['11:00', '18:00'], dur: 60, target: 'all', meal: true },
+  { id: 'p14', ev: 'e10', name: '청년 버스킹 공연', days: WKND, times: ['15:00', '16:30'], dur: 40, target: 'all' }
+];
+// 매장: 이름은 시연용 가상
+const S = (id, name, type, sub, lat, lng, open, close, fr) => ({ id, name, type, sub, lat, lng, open, close, franchise: !!fr });
+const STORES = [
+  S('s1', '명동골목 닭갈비 ①', 'restaurant', '닭갈비', 37.8806, 127.7268, '11:00', '22:00'),
+  S('s2', '명동골목 닭갈비 ②', 'restaurant', '닭갈비', 37.8799, 127.7274, '11:30', '21:30'),
+  S('s3', '중앙로 막국수 ①', 'restaurant', '막국수', 37.8818, 127.7250, '10:30', '20:00'),
+  S('s4', '명동 골목 카페 ①', 'cafe', '카페', 37.8796, 127.7255, '10:00', '22:00'),
+  S('s5', '프랜차이즈 카페 ①', 'cafe', '카페', 37.8809, 127.7240, '08:00', '22:00', true),
+  S('s6', '공지천 호숫가 카페 ①', 'cafe', '카페', 37.8724, 127.7090, '10:00', '21:00'),
+  S('s7', '공지천 한식당 ①', 'restaurant', '한식', 37.8705, 127.7120, '11:00', '21:00'),
+  S('s8', '공지천 닭갈비 ①', 'restaurant', '닭갈비', 37.8732, 127.7131, '11:00', '22:00'),
+  S('s9', '소양강변 막국수 ①', 'restaurant', '막국수', 37.8925, 127.7240, '10:30', '20:00'),
+  S('s10', '소양강변 카페 ①', 'cafe', '카페', 37.8941, 127.7201, '10:00', '21:00'),
+  S('s11', '근화동 닭갈비 ①', 'restaurant', '닭갈비', 37.8930, 127.7110, '11:00', '21:30'),
+  S('s12', '서면 메밀집 ①', 'restaurant', '막국수', 37.8628, 127.6915, '11:00', '19:30'),
+  S('s13', '서면 베이커리 카페 ①', 'cafe', '베이커리', 37.8600, 127.6878, '10:00', '20:00'),
+  S('s14', '신북 막국수 ①', 'restaurant', '막국수', 37.9250, 127.7620, '10:30', '19:00'),
+  S('s15', '신북 숯불닭갈비 ①', 'restaurant', '닭갈비', 37.9275, 127.7668, '11:00', '21:00'),
+  S('s16', '석사동 한식당 ①', 'restaurant', '한식', 37.8655, 127.7470, '11:00', '21:00'),
+  S('s17', '석사동 카페 ①', 'cafe', '카페', 37.8638, 127.7515, '09:00', '21:00'),
+  S('s18', '효자동 닭갈비 ①', 'restaurant', '닭갈비', 37.8728, 127.7385, '11:00', '22:00'),
+  S('s19', '효자동 카페 ①', 'cafe', '카페', 37.8742, 127.7420, '10:00', '22:00'),
+  S('s20', '실레마을 막국수 ①', 'restaurant', '막국수', 37.8175, 127.8150, '10:30', '19:00'),
+  S('s21', '실레마을 찻집 ①', 'cafe', '전통찻집', 37.8160, 127.8115, '10:00', '18:00'),
+  S('s22', '춘천중앙시장(낭만시장)', 'market', '전통시장', 37.8812, 127.7283, '09:00', '20:00'),
+  S('s23', '춘천풍물시장', 'market', '전통시장', 37.8652, 127.7233, '08:00', '18:00'),
+  S('s24', '프랜차이즈 패밀리레스토랑 ①', 'restaurant', '양식', 37.8835, 127.7195, '11:00', '22:00', true)
+];
+const STORE = Object.fromEntries(STORES.map(s => [s.id, s]));
+const EV = Object.fromEntries(EVENTS.map(e => [e.id, e]));
+const venueOf = ev => VENUES[ev.venue];
+
+function programsOn(date) {
+  const dow = parseYmd(date).getDay(), out = [];
+  for (const t of TPL) {
+    const ev = EV[t.ev];
+    if (date < ev.start || date > ev.end || !t.days.includes(dow)) continue;
+    const v = venueOf(ev), indoor = t.indoor ?? (t.out ? false : ev.indoor);
+    const base = { tpl: t.id, ev: ev.id, name: t.name, evName: ev.name, place: v.name, lat: v.lat, lng: v.lng, dur: t.dur, target: t.target, indoor, cat: ev.cat, meal: !!t.meal };
+    if (t.win) out.push({ ...base, id: `${t.id}@${t.win[0].replace(':', '')}`, flex: true, from: toMin(t.win[0]), to: toMin(t.win[1]) });
+    else for (const h of t.times) out.push({ ...base, id: `${t.id}@${h.replace(':', '')}`, flex: false, from: toMin(h), to: toMin(h) + t.dur });
+  }
+  return out.sort((a, b) => a.from - b.from);
+}
+const eventDaysAhead = (ev, n = 7) => { const r = []; for (let i = 0; i < n; i++) { const d = rel(i); const ps = programsOn(d).filter(p => p.ev === ev.id); if (ps.length) r.push([d, ps]); } return r; };
+
+/* ---------- 거리·이동 ---------- */
+function km(a, b) { const R = 6371, r = x => x * Math.PI / 180; const dl = r(b.lat - a.lat), dn = r(b.lng - a.lng); const h = Math.sin(dl / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); }
+function move(a, b, mode) {
+  if (!a || !b) return { min: 0, how: '' };
+  const d = km(a, b);
+  if (d < 0.08) return { min: 0, how: '같은 장소' };
+  if (d <= 1.2 || mode === 'walk') return { min: Math.max(3, Math.round(d * 1.25 * 1000 / 67)), how: '도보' };
+  if (mode === 'transit') return { min: Math.round(10 + d * 4), how: '버스·택시' };
+  return { min: Math.round(6 + d * 2.4), how: '차' };
+}
+const nearStores = (pt, type, r = 1.5) => STORES.filter(s => (!type || s.type === type || (type === 'restaurant' && s.type === 'market')) && km(pt, s) <= r).sort((a, b) => km(pt, a) - km(pt, b));
+
+/* ---------- 지도 ---------- */
+const PX = lng => (lng - 127.66) / 0.17 * 600, PY = lat => (37.94 - lat) / 0.14 * 600;
+function mapBase() {
+  return `<rect width="600" height="600" fill="var(--land)"/>
+  <path d="M60 0 C 90 20 100 30 106 43 C 125 110 140 170 141 214 C 150 270 162 300 159 343 C 150 400 138 430 141 471 C 160 530 190 570 212 600" fill="none" stroke="var(--water)" stroke-width="30" stroke-linecap="round"/>
+  <path d="M600 43 C 520 60 470 75 424 86 C 380 105 350 130 318 150 C 280 170 250 185 229 193 C 200 198 175 200 150 206" fill="none" stroke="var(--water)" stroke-width="18" stroke-linecap="round"/>
+  <path d="M300 343 C 260 320 230 300 194 291 C 175 286 162 284 150 283" fill="none" stroke="var(--water)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M200 237 L226 326 L380 420 L543 523" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="2 6" opacity=".7"/>
+  <g font-size="15" fill="var(--muted)" font-weight="500">
+  <text x="40" y="470">의암호</text><text x="440" y="70">소양강</text><text x="210" y="262">춘천역</text>
+  <text x="236" y="348">남춘천역</text><text x="470" y="548">김유정역</text><text x="262" y="300">공지천</text></g>`;
+}
+function drawMap(svg, pts, route) {
+  const P = [];
+  pts.forEach(p => { let x = PX(p.lng), y = PY(p.lat), k = 0; while (P.some(q => Math.hypot(q[0] - x, q[1] - y) < 20) && k < 8) { x += 18 * Math.cos(k * 1.2); y += 18 * Math.sin(k * 1.2); k++; } P.push([x, y]); });
+  const line = route && P.length > 1 ? `<polyline class="route" points="${P.map(p => p.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linejoin="round"/>` : '';
+  const marks = P.map((p, i) => `<g><circle cx="${p[0]}" cy="${p[1]}" r="13" fill="${pts[i].c || 'var(--accent)'}" stroke="var(--land)" stroke-width="3"/><text x="${p[0]}" y="${p[1] + 5}" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">${i + 1}</text></g>`).join('');
+  svg.innerHTML = mapBase() + line + marks;
+}
+
+/* ---------- 조건 파싱 (규칙 기반) ---------- */
+function nextDow(dow, plusWeek) { const d = new Date(TODAY); let n = (dow - d.getDay() + 7) % 7; if (plusWeek) n += 7; return ymd(addDays(d, n)); }
+function parseKo(t) {
+  const c = {};
+  const dm = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
+  let m;
+  if (/모레/.test(t)) c.date = rel(2); else if (/내일/.test(t)) c.date = rel(1); else if (/오늘|지금/.test(t)) c.date = T;
+  if ((m = t.match(/(다음\s*주\s*)?([월화수목금토일])요일/))) c.date = nextDow(dm[m[2]], !!m[1]);
+  else if (/주말/.test(t)) c.date = nextDow(6, /다음\s*주/.test(t));
+  if ((m = t.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/)) || (m = t.match(/\b(\d{1,2})\/(\d{1,2})\b/))) {
+    let y = TODAY.getFullYear(); const d = new Date(y, +m[1] - 1, +m[2]); if (d < TODAY) d.setFullYear(y + 1); c.date = ymd(d);
+  }
+  if (/아이|애들|아기|자녀|딸|아들|초등|유치원|가족/.test(t)) c.companions = 'family';
+  else if (/연인|여자\s*친구|남자\s*친구|여친|남친|애인|데이트|커플|부부/.test(t)) c.companions = 'couple';
+  else if (/부모님|어머니|아버지|엄마|아빠|어르신/.test(t)) c.companions = 'parents';
+  else if (/친구/.test(t)) c.companions = 'friends';
+  else if (/혼자|나\s*홀로|혼행/.test(t)) c.companions = 'solo';
+  const it = [];
+  if (/공연|인형극|음악|버스킹|연주|콘서트/.test(t)) it.push('performance');
+  if (/체험|만들기|직접/.test(t)) it.push('experience');
+  if (/먹|맛집|닭갈비|막국수|음식|시장|먹거리/.test(t)) it.push('food');
+  if (/전시|박물관|미술|역사/.test(t)) it.push('exhibition');
+  if (/야경|밤|불빛|산책|풍경|경치|사진/.test(t)) it.push('scenery');
+  if (it.length) c.interests = it;
+  if ((m = t.match(/(오전|오후)?\s*(\d{1,2})\s*시\s*(반)?\s*(쯤|경|에)?\s*(도착|출발해서|부터)/))) c.arrive = toHM(hour(m[1], +m[2]) * 60 + (m[3] ? 30 : 0));
+  if ((m = t.match(/(오전|오후)?\s*(\d{1,2})\s*시\s*(반)?\s*(까지|에\s*(떠나|돌아|출발해야))/))) c.leave = toHM(hour(m[1], +m[2], true) * 60 + (m[3] ? 30 : 0));
+  if (/자가용|운전|렌터카|(^|[^기])차\s*(로|타고|끌고|가지고)/.test(t)) c.transport = 'car';
+  else if (/기차|ITX|itx|버스|대중교통|전철|지하철|경춘선/.test(t)) c.transport = 'transit';
+  else if (/걸어|도보|뚜벅/.test(t)) c.transport = 'walk';
+  if (/비\s*(오|와|가\s*오)|우천|실내|추우|추워|눈\s*(오|와)/.test(t)) c.indoorOnly = true;
+  if (/야외도\s*괜찮|야외\s*좋/.test(t)) c.indoorOnly = false;
+  if ((m = t.match(/(닭갈비|막국수|한식|카페|빵|베이커리|시장)/))) c.food = m[1] === '빵' ? '베이커리' : m[1];
+  return c;
+}
+function hour(ap, h, isLeave) { if (ap === '오후' && h < 12) return h + 12; if (ap === '오전') return h; if (h <= 7) return h + 12; if (isLeave && h <= 9) return h + 12; return h; }
+const COMP = { family: '아이와 가족', couple: '연인·부부', friends: '친구', solo: '혼자', parents: '부모님' };
+const TRANS = { car: '자가용', transit: '대중교통', walk: '도보' };
+
+/* ---------- 규칙 기반 코스 엔진 ---------- */
+function scoreProg(p, c) {
+  let s = 1;
+  if ((c.interests || []).some(i => p.cat.includes(i))) s += 3;
+  if (c.companions === 'family') { if (p.target === 'kids') s += 3; if (p.target === 'adult') s -= 6; if (p.from >= 19 * 60) s -= 2; }
+  if (c.companions === 'couple' || c.companions === 'friends') { if (p.target === 'kids') s -= 3; if (p.from >= 17 * 60 || p.to >= 19 * 60) s += 2; }
+  if (c.companions === 'parents' && p.cat.includes('exhibition')) s += 1;
+  if (c.indoorOnly && p.indoor) s += 2;
+  if (c.mustEv && p.ev === c.mustEv) s += 10;
+  return s;
+}
+function planRule(c, banned = new Set()) {
+  const date = c.date, progs = programsOn(date).filter(p => (!c.indoorOnly || p.indoor) && !banned.has(p.tpl));
+  const mode = c.transport || 'car';
+  let t = toMin(c.arrive || '10:00');
+  const end = toMin(c.leave || (c.companions === 'family' ? '19:00' : '21:00'));
+  let loc = c.transport === 'transit' ? { lat: 37.8846, lng: 127.7166 } : null;
+  const items = [], usedTpl = new Set(), usedEv = new Map(), usedStore = new Set();
+  let lunch = false, cafe = false, dinner = false;
+  const addStore = (type, dur, pref) => {
+    const pt = loc || { lat: 37.8805, lng: 127.7265 };
+    let cand = nearStores(pt, type, 2.5).filter(s => !usedStore.has(s.id) && toMin(s.open) <= t && toMin(s.close) >= t + dur);
+    if (!cand.length) cand = STORES.filter(s => s.type === type && !usedStore.has(s.id) && toMin(s.open) <= t && toMin(s.close) >= t + dur).sort((a, b) => km(pt, a) - km(pt, b));
+    const sc = s => -km(pt, s) + (pref && (s.sub === pref || (pref === '시장' && s.type === 'market')) ? 3 : 0) + (s.franchise ? -0.8 : 0) + (s.type === 'market' && (c.interests || []).includes('food') ? 0.6 : 0);
+    cand.sort((a, b) => sc(b) - sc(a));
+    const s = cand[0]; if (!s) return false;
+    const mv = move(loc, s, mode); const at = t + mv.min;
+    items.push({ kind: 'store', ref: s.id, time: toHM(at), dur, reason: storeReason(s, c, pref) });
+    usedStore.add(s.id); loc = s; t = at + dur; return true;
+  };
+  for (let guard = 0; guard < 40 && t < end - 30 && items.length < 6; guard++) {
+    const lunchDone = items.some(i => i.kind === 'prog' && progById(date, i.ref)?.meal);
+    if (!lunch && (lunchDone)) lunch = true;
+    if (!lunch && t >= 11 * 60 + 20 && t <= 14 * 60) { lunch = true; if (addStore('restaurant', 60, c.food && c.food !== '카페' ? c.food : null)) continue; }
+    if (!dinner && t >= 17 * 60 + 30 && t <= 19 * 60 + 30 && end - t >= 70) { dinner = true; if (addStore('restaurant', 60, c.food === '막국수' ? '닭갈비' : c.food)) continue; }
+    let best = null;
+    for (const p of progs) {
+      if (usedTpl.has(p.tpl) || (usedEv.get(p.ev) || 0) >= 2 || items.filter(i => i.kind === 'prog').length >= 4) continue;
+      const mv = move(loc, p, mode), ready = t + mv.min;
+      const st = p.flex ? Math.max(p.from, ready) : p.from;
+      if (st < ready || st + p.dur > Math.min(p.to, end)) continue;
+      if (!lunch && st < 11 * 60 + 30 && st + p.dur > 13 * 60 + 40 && !p.meal) continue;
+      const wait = st - ready;
+      const rep = items.some(i => i.kind === 'prog' && progById(date, i.ref)?.cat[0] === p.cat[0]) ? 1.5 : 0;
+      const sc = scoreProg(p, c) - wait / 45 - mv.min / 12 - rep;
+      if (!best || sc > best.sc) best = { p, st, sc };
+    }
+    if (best && best.sc > -3) {
+      const p = best.p;
+      items.push({ kind: 'prog', ref: p.id, time: toHM(best.st), dur: p.dur, reason: progReason(p, c) });
+      usedTpl.add(p.tpl); usedEv.set(p.ev, (usedEv.get(p.ev) || 0) + 1); loc = p; t = best.st + p.dur;
+      continue;
+    }
+    if (!cafe && items.length >= 2 && t >= 13 * 60 && t <= 17 * 60 && c.food !== '닭갈비') { cafe = true; if (addStore('cafe', 40, c.food === '베이커리' ? '베이커리' : null)) continue; }
+    if (!lunch && t < 11 * 60 + 20) { t = 11 * 60 + 30; continue; }
+    const nexts = progs.filter(p => !usedTpl.has(p.tpl) && p.from > t && p.from + p.dur <= end).map(p => p.from);
+    if (!nexts.length) break;
+    t = Math.max(t + 20, Math.min(...nexts) - 15);
+  }
+  return items;
+}
+const progById = (date, id) => programsOn(date).find(p => p.id === id);
+function progReason(p, c) {
+  if (c.mustEv === p.ev) return '요청하신 행사예요.';
+  if (c.indoorOnly && p.indoor) return '실내 프로그램이라 날씨 걱정이 없어요.';
+  if (c.companions === 'family' && p.target === 'kids') return '아이들이 직접 참여하기 좋은 프로그램이에요.';
+  if ((c.interests || []).some(i => p.cat.includes(i))) return `관심사(${CAT[p.cat.find(i => (c.interests || []).includes(i))]})에 맞춰 넣었어요.`;
+  if (p.from >= 17 * 60) return '저녁에 둘러보기 좋은 프로그램이에요.';
+  return '이 시간대에 운영하는 가까운 프로그램이에요.';
+}
+function storeReason(s, c, pref) {
+  if (pref && s.sub === pref) return `요청하신 ${pref} 매장이에요.`;
+  if (s.type === 'market') return '지역 상인이 운영하는 전통시장에서 식사와 간식을 해결할 수 있어요.';
+  if (s.type === 'cafe') return '이동 중간에 쉬어 가기 좋은 가까운 카페예요.';
+  return `직전 장소에서 가까운 ${s.sub} 식당이에요.`;
+}
+
+/* ---------- 코스 검증 ---------- */
+function resolve(date, it) {
+  if (it.kind === 'store') { const s = STORE[it.ref]; return s && { ...s, place: s.name, title: s.name, sub2: `${s.sub} · ${s.open}~${s.close}` }; }
+  const p = progById(date, it.ref); return p && { ...p, title: p.name, sub2: `${p.evName} · ${p.place}` };
+}
+function validate(c, items) {
+  const errs = [], mode = c.transport || 'car';
+  if (items.length < 2) errs.push('항목이 2개 미만입니다.');
+  let prevEnd = null, prev = null;
+  const seen = new Set();
+  items.forEach((it, i) => {
+    const r = resolve(c.date, it);
+    if (!r) { errs.push(`${i + 1}번 항목(${it.ref})은 후보 목록에 없습니다.`); return; }
+    if (seen.has(it.ref)) errs.push(`${r.title}이(가) 두 번 들어 있습니다.`); seen.add(it.ref);
+    if (!/^\d{1,2}:\d{2}$/.test(it.time || '')) { errs.push(`${r.title}의 시간 형식이 잘못됐습니다.`); return; }
+    const st = toMin(it.time), dur = it.kind === 'store' ? (it.dur || (r.type === 'cafe' ? 40 : 60)) : r.dur;
+    it.dur = dur;
+    if (it.kind === 'prog') {
+      if (!r.flex && st !== r.from) errs.push(`${r.title}은(는) ${toHM(r.from)} 시작입니다.`);
+      if (r.flex && (st < r.from || st + dur > r.to)) errs.push(`${r.title}은(는) ${toHM(r.from)}~${toHM(r.to)} 사이에만 운영합니다.`);
+      if (c.indoorOnly && !r.indoor) errs.push(`${r.title}은(는) 야외 프로그램입니다(실내만 요청).`);
+    } else if (st < toMin(r.open) || st + dur > toMin(r.close)) errs.push(`${r.title} 영업시간(${r.open}~${r.close}) 밖입니다.`);
+    if (prevEnd != null) { const mv = move(prev, r, mode).min; if (st < prevEnd + mv) errs.push(`${r.title}: 앞 일정이 ${toHM(prevEnd)}에 끝나고 이동에 약 ${mv}분이 걸려 ${toHM(st)}에 도착할 수 없습니다.`); }
+    prevEnd = st + dur; prev = r;
+  });
+  return errs;
+}
+
+/* ---------- 상태 ---------- */
+const state = { cond: {}, turns: [], course: null, history: [], busy: false, ctl: null };
+let sample = null;
+const modeEl = $('#mode');
+function setMode() { modeEl.textContent = sample ? 'AI 추천 (Claude)' : '규칙 기반 추천'; modeEl.classList.toggle('on', !!sample); }
+setMode();
+(async () => {
+  try { if (window.claude && window.claude.use) sample = await window.claude.use('sample'); } catch (e) { sample = null; }
+  setMode();
+})();
+
+/* ---------- Claude 호출 ---------- */
+function dayTable() { let s = ''; for (let i = 0; i < 14; i++) { const d = addDays(TODAY, i); s += `${ymd(d)}(${DOW[d.getDay()]}) `; } return s; }
+async function aiExtract(text) {
+  const prompt = `춘천 축제 코스 추천 서비스의 조건 추출기다. 사용자 메시지에서 조건을 뽑아 JSON 하나로만 답하라.
+오늘: ${T}(${DOW[TODAY.getDay()]}). 앞으로 14일: ${dayTable()}
+지금까지 조건: ${JSON.stringify(state.cond)}
+현재 코스가 있는가: ${state.course ? '예' : '아니오'}
+사용자 메시지: """${text.slice(0, 600)}"""
+형식(모르면 null, 바뀌지 않은 값도 null):
+{"date":"YYYY-MM-DD|null","companions":"family|couple|friends|solo|parents|null","interests":["performance|experience|food|exhibition|scenery"]|null,"arrive":"HH:MM|null","leave":"HH:MM|null","transport":"car|transit|walk|null","indoorOnly":true|false|null,"food":"닭갈비|막국수|한식|카페|베이커리|시장|null","intent":"course|adjust|info|other","remove":["사용자가 빼 달라고 한 장소나 프로그램 이름"]|null}
+intent: 새 코스 요청이나 조건 제시는 course, 기존 코스 수정 요청은 adjust, 행사 정보 질문은 info, 축제와 무관하면 other.`;
+  return sample.json(prompt, { modelTier: 'quick', cache: false, signal: state.ctl?.signal });
+}
+function candidates(c) {
+  const progs = programsOn(c.date).filter(p => !c.indoorOnly || p.indoor);
+  const lines = progs.map(p => `P:${p.id} | ${p.name} (${p.evName}) | ${p.place} | ${p.flex ? `자유입장 ${toHM(p.from)}~${toHM(p.to)}, 머무는 시간 ${p.dur}분` : `${toHM(p.from)} 시작, ${p.dur}분`} | 대상 ${p.target} | ${p.indoor ? '실내' : '야외'} | ${p.cat.map(x => CAT[x]).join(',')}${p.meal ? ' | 식사 겸함' : ''}`);
+  const sids = new Set(); progs.forEach(p => nearStores(p, null, 1.2).slice(0, 6).forEach(s => sids.add(s.id)));
+  if (c.transport === 'transit') nearStores({ lat: 37.8846, lng: 127.7166 }, null, 1.2).slice(0, 4).forEach(s => sids.add(s.id));
+  const sl = [...sids].map(id => STORE[id]).map(s => `S:${s.id} | ${s.name} | ${s.sub} | ${s.open}~${s.close}${s.franchise ? ' | 프랜차이즈' : ''} | 가까운 곳: ${nearestVenue(s)}`);
+  return { progs, text: `[프로그램]\n${lines.join('\n') || '(없음)'}\n[매장]\n${sl.join('\n')}` };
+}
+const nearestVenue = s => { const v = Object.values(VENUES).sort((a, b) => km(s, a) - km(s, b))[0]; return `${v.name} ${Math.round(km(s, v) * 1000)}m`; };
+function moveTable(c, cand) {
+  const pts = [...new Map(cand.progs.map(p => [p.place, p])).values()];
+  if (pts.length > 9) return '';
+  const mode = c.transport || 'car'; let s = '';
+  for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) s += `${pts[i].place}↔${pts[j].place} ${move(pts[i], pts[j], mode).min}분; `;
+  return s;
+}
+async function aiCompose(c, userText, errors) {
+  const cand = candidates(c);
+  const prev = state.course ? state.course.items.map(i => `${i.time} ${i.kind === 'store' ? 'S' : 'P'}:${i.ref}`).join(', ') : '없음';
+  const prompt = `너는 춘천 축제·행사 관람 코스를 짜 주는 안내원 '춘천마이스 내비게이터'다.
+날짜: ${c.date}(${DOW[parseYmd(c.date).getDay()]})
+조건: 동행 ${COMP[c.companions] || '미정'}, 관심사 ${(c.interests || []).map(i => CAT[i]).join(', ') || '미정'}, 도착 ${c.arrive || '10:00'}, 마무리 ${c.leave || (c.companions === 'family' ? '19:00' : '21:00')}, 이동 ${TRANS[c.transport] || '자가용'}, 실내만 ${c.indoorOnly ? '예' : '아니오'}, 음식 선호 ${c.food || '없음'}${c.mustEv ? `, 꼭 넣을 행사 ${EV[c.mustEv].name}` : ''}
+이전 코스: ${prev}
+사용자의 마지막 요청: """${userText.slice(0, 500)}"""
+${cand.text}
+장소 간 예상 이동 시간: ${moveTable(c, cand)}
+${errors ? `직전 답의 검증 오류(반드시 고쳐라): ${errors.join(' / ')}` : ''}
+규칙:
+1. 위 후보 목록의 ID만 쓴다. 목록에 없는 장소·시간·요금은 절대 만들지 않는다.
+2. 고정 시작 프로그램은 그 시작 시간을 그대로 쓰고, 자유입장은 운영 시간 안에서 시작 시간을 정한다.
+3. 앞 일정 종료 + 이동 시간 이후에 다음 일정을 시작한다. 매장 체류는 식당 60분, 카페 40분.
+4. 3~6개 항목. 점심(11:30~13:30)과 저녁 시간대에 일정이 있으면 식당이나 시장을 넣는다(식사 겸함 프로그램이면 생략 가능).
+5. 아이와 함께면 체험·낮 프로그램, 연인·친구면 공연·야간 프로그램을 우선한다. 대상 adult는 아이와 함께일 때 넣지 않는다.
+6. 같은 조건이면 개인 매장과 전통시장을 프랜차이즈보다 먼저 고른다.
+7. 이전 코스가 있고 수정 요청이면 요청과 관계없는 항목은 되도록 유지한다.
+JSON 하나로만 답하라: {"message":"사용자에게 보여 줄 2~3문장 안내(한국어, 존댓말)","items":[{"ref":"P:… 또는 S:…","time":"HH:MM","reason":"한 줄 추천 이유"}]}`;
+  const out = await sample.json(prompt, { modelTier: 'default', cache: false, signal: state.ctl?.signal });
+  const items = (out?.items || []).map(x => {
+    const ref = String(x.ref || ''); const kind = ref.startsWith('S:') ? 'store' : 'prog';
+    return { kind, ref: ref.slice(2), time: String(x.time || '').padStart(5, '0'), reason: String(x.reason || '').slice(0, 120) };
+  }).sort((a, b) => toMin(a.time) - toMin(b.time));
+  return { message: String(out?.message || '').slice(0, 400), items };
+}
+async function aiAnswer(text) {
+  const evs = EVENTS.filter(e => e.end >= T).map(e => `${e.name} | ${venueOf(e).name} | ${e.start}~${e.end} | ${e.fee} | ${e.summary}`).join('\n');
+  const prog = TPL.map(t => `${EV[t.ev].name}: ${t.name} ${t.times ? t.times.join(', ') + ' 시작' : t.win.join('~') + ' 자유입장'} (${t.days.length === 7 ? '매일' : t.days.map(d => DOW[d]).join('·') + '요일'})`).join('\n');
+  const { text: a } = await sample(`춘천 축제 안내원으로서 아래 데이터만 근거로 3문장 이내로 답하라. 데이터에 없으면 모른다고 하고 공식 안내 확인을 권하라. 축제와 무관한 질문이면 정중히 춘천 축제 안내로 돌아오라.
+오늘: ${T}
+[행사]\n${evs}\n[프로그램]\n${prog}\n질문: """${text.slice(0, 500)}"""`, { modelTier: 'quick', cache: false, signal: state.ctl?.signal });
+  return a;
+}
+
+/* ---------- 대화 흐름 ---------- */
+const log = $('#log');
+function say(role, text, extra = '') {
+  const d = document.createElement('div'); d.className = `msg ${role}`;
+  d.innerHTML = esc(text) + extra; log.append(d); log.scrollTop = log.scrollHeight; return d;
+}
+function thinking() { const d = say('a', ''); d.innerHTML = '<span class="dots" aria-label="생각 중"><i></i><i></i><i></i></span> <span class="st">조건을 확인하고 있어요</span>'; return d; }
+const QUICK = {
+  date: () => [['오늘', T], ['내일', rel(1)], ['이번 토요일', nextDow(6)], ['이번 일요일', nextDow(0)]].map(([l, v]) => ({ l, set: { date: v } })),
+  companions: () => Object.entries(COMP).map(([k, l]) => ({ l, set: { companions: k } })),
+  interests: () => Object.entries(CAT).map(([k, l]) => ({ l, set: { interests: [k] } }))
+};
+function missing(c) { return ['date', 'companions', 'interests'].filter(k => !c[k] || (Array.isArray(c[k]) && !c[k].length)); }
+function askMissing(ms) {
+  const lab = { date: '언제', companions: '누구와', interests: '무엇을 좋아하는지' };
+  const d = say('a', `코스를 짜려면 ${ms.map(m => lab[m]).join(', ')} 알려 주세요. 아래에서 골라도 돼요.`);
+  ms.forEach(m => {
+    const box = document.createElement('div'); box.className = 'chips';
+    QUICK[m]().forEach(q => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = q.l; b.onclick = () => { merge(q.set); box.querySelectorAll('button').forEach(x => x.disabled = true); b.setAttribute('aria-pressed', 'true'); go(q.l, true); }; box.append(b); });
+    d.append(box);
+  });
+}
+function merge(n) {
+  for (const [k, v] of Object.entries(n)) {
+    if (v === null || v === undefined || (Array.isArray(v) && !v.length)) continue;
+    state.cond[k] = v;
+  }
+  renderCond();
+}
+function renderCond() {
+  const c = state.cond, parts = [];
+  parts.push(`날짜 <b>${c.date ? esc(fmtDate(c.date)) : '미정'}</b>`);
+  parts.push(`동행 <b>${esc(COMP[c.companions] || '미정')}</b>`);
+  parts.push(`관심사 <b>${esc((c.interests || []).map(i => CAT[i]).join(', ') || '미정')}</b>`);
+  if (c.transport) parts.push(`이동 <b>${esc(TRANS[c.transport])}</b>`);
+  if (c.arrive) parts.push(`도착 <b>${esc(c.arrive)}</b>`);
+  if (c.indoorOnly) parts.push('<b>실내 우선</b>');
+  if (c.food) parts.push(`음식 <b>${esc(c.food)}</b>`);
+  $('#cond').innerHTML = parts.join(' · ') + ' <button type="button" class="chip" id="resetBtn" style="min-height:32px;margin-left:auto">새로 시작</button>';
+  $('#resetBtn').onclick = () => { state.cond = {}; state.course = null; state.history = []; log.innerHTML = ''; greet(); renderCond(); renderCourse(); };
+}
+function greet() { say('a', '안녕하세요. 춘천 축제 코스를 짜 드릴게요. 언제, 누구와, 무엇을 하고 싶은지 편하게 말씀해 주세요.\n예: "이번 토요일에 아이 둘이랑 차로 가요. 체험 위주로요"'); }
+
+async function go(text, fromChip) {
+  if (state.busy) return;
+  if (!fromChip) say('u', text);
+  state.busy = true; $('#sendBtn').disabled = true; $('#stopBtn').hidden = !sample;
+  const th = thinking(), st = th.querySelector('.st');
+  state.ctl = new AbortController();
+  let intent = state.course ? 'adjust' : 'course', removes = [];
+  const rule = fromChip ? {} : parseKo(text);
+  if (state.course && rule.companions && rule.date && (rule.companions !== state.cond.companions || rule.date !== state.cond.date)) { state.cond = {}; intent = 'course'; }
+  try {
+    if (sample && !fromChip) {
+      try {
+        const x = await aiExtract(text);
+        if (x && typeof x === 'object') {
+          intent = ['course', 'adjust', 'info', 'other'].includes(x.intent) ? x.intent : intent;
+          const clean = {};
+          if (/^\d{4}-\d{2}-\d{2}$/.test(x.date || '')) clean.date = x.date;
+          if (COMP[x.companions]) clean.companions = x.companions;
+          if (Array.isArray(x.interests)) clean.interests = x.interests.filter(i => CAT[i]);
+          for (const k of ['arrive', 'leave']) if (/^\d{1,2}:\d{2}$/.test(x[k] || '')) clean[k] = x[k].padStart(5, '0');
+          if (TRANS[x.transport]) clean.transport = x.transport;
+          if (typeof x.indoorOnly === 'boolean') clean.indoorOnly = x.indoorOnly;
+          if (typeof x.food === 'string' && x.food !== 'null') clean.food = x.food;
+          removes = Array.isArray(x.remove) ? x.remove.map(String) : [];
+          merge({ ...rule, ...clean });
+        } else merge(rule);
+      } catch (e) { if (e && e.code === 'cancelled') throw e; if (e && (e.code === 'not_granted' || e.code === 'sampling_disabled')) { sample = null; setMode(); } merge(rule); }
+    } else {
+      merge(rule);
+      if (!fromChip && /몇\s*시|언제|얼마|요금|어디|뭐\s*해|있어\?|있나요/.test(text) && !Object.keys(rule).length) intent = 'info';
+      if (/빼|말고|대신|바꿔|다른/.test(text)) removes = [text];
+    }
+    if (intent === 'info' || intent === 'other') {
+      st.textContent = '안내 데이터를 찾고 있어요';
+      const a = sample ? await aiAnswer(text) : infoRule(text);
+      th.remove(); say('a', a, `<span class="src">근거: 서비스에 등록된 행사 데이터${sample ? ' · Claude 답변' : ''}</span>`); return;
+    }
+    const ms = missing(state.cond);
+    if (ms.length) { th.remove(); askMissing(ms); return; }
+    if (state.cond.date < T) { th.remove(); say('a', '지난 날짜예요. 오늘 이후 날짜로 알려 주세요.'); delete state.cond.date; renderCond(); return; }
+    st.textContent = '그날 열리는 행사와 주변 매장을 찾고 있어요';
+    let result = null, by = 'rule';
+    if (sample) {
+      try {
+        st.textContent = 'Claude가 코스를 짜고 있어요 (10~40초)';
+        let r = await aiCompose(state.cond, text);
+        let errs = validate(state.cond, r.items);
+        if (errs.length) { st.textContent = '시간이 겹치는 부분을 고치고 있어요'; r = await aiCompose(state.cond, text, errs); errs = validate(state.cond, r.items); }
+        if (!errs.length) { result = r; by = 'ai'; }
+      } catch (e) { if (e && e.code === 'cancelled') throw e; if (e && (e.code === 'not_granted' || e.code === 'sampling_disabled')) { sample = null; setMode(); } }
+    }
+    if (!result) {
+      const banned = new Set();
+      if (state.course && removes.length) for (const it of state.course.items) { const r = resolve(state.course.date, it); if (r && removes.some(x => x.includes(r.title) || x.includes(r.evName || '@@') || (r.evName && x.includes(r.evName.split(' ')[0])))) banned.add(r.tpl); }
+      const items = planRule(state.cond, banned);
+      result = { items, message: ruleMessage(state.cond, items) };
+    }
+    th.remove();
+    if (!result.items.length) { say('a', `${fmtDate(state.cond.date)}에는 조건에 맞는 행사를 찾지 못했어요. 날짜나 관심사를 바꿔 보시겠어요?`); askMissing(['date']); return; }
+    if (state.course) state.history.push(state.course);
+    const prevRefs = new Set((state.course?.items || []).map(i => i.ref));
+    state.course = { date: state.cond.date, cond: { ...state.cond }, items: result.items, by, changed: state.history.length ? new Set(result.items.filter(i => !prevRefs.has(i.ref)).map(i => i.ref)) : new Set() };
+    say('a', result.message || '코스를 짰어요.', `<span class="src">${by === 'ai' ? 'Claude가 등록 데이터 안에서 구성하고, 시간표·이동 시간 검증을 통과한 코스예요.' : '규칙 기반 엔진이 등록 데이터로 구성한 코스예요.'}</span>`);
+    renderCourse();
+  } catch (e) {
+    th.remove(); if (e && e.code === 'cancelled') say('a', '중지했어요.'); else say('a', '코스를 만드는 중에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.');
+  } finally { state.busy = false; $('#sendBtn').disabled = false; $('#stopBtn').hidden = true; }
+}
+function ruleMessage(c, items) {
+  const n = items.filter(i => i.kind === 'prog').length, s = items.filter(i => i.kind === 'store').length;
+  return `${fmtDate(c.date)} ${COMP[c.companions]} 코스예요. 프로그램 ${n}곳과 식당·카페 ${s}곳을 이동 시간에 맞춰 넣었어요.${c.indoorOnly ? ' 실내 위주로 골랐어요.' : ''} "점심은 막국수로", "비 오면 실내로"처럼 말하면 다시 짜 드려요.`;
+}
+function infoRule(text) {
+  const hit = EVENTS.filter(e => text.includes(e.name.split(' ')[0]) || e.name.split(' ').some(w => w.length >= 3 && text.includes(w)));
+  if (!hit.length) return '어떤 행사를 궁금해하시는지 행사 이름으로 알려 주세요. "축제·행사" 메뉴에서 전체 목록도 볼 수 있어요.';
+  return hit.slice(0, 2).map(e => { const t = TPL.filter(x => x.ev === e.id).map(x => `${x.name} ${x.times ? x.times.join('·') : x.win.join('~')}`).join(', '); return `${e.name}: ${venueOf(e).name}, ${fmtDate(e.start)}~${fmtDate(e.end)}, ${e.fee}. ${t}`; }).join('\n');
+}
+
+/* ---------- 코스 패널 ---------- */
+function renderCourse() {
+  const box = $('#coursePanel'), c = state.course;
+  if (!c) { box.innerHTML = '<div class="empty"><h3>아직 코스가 없어요</h3><p>왼쪽에서 조건을 말해 주면 여기에 시간대별 코스와 지도가 나타나요.</p></div>'; return; }
+  const mode = c.cond.transport || 'car';
+  const rs = c.items.map(i => resolve(c.date, i));
+  let warn = '';
+  const lis = c.items.map((it, i) => {
+    const r = rs[i], nx = rs[i + 1];
+    const mv = nx ? move(r, nx, mode) : null;
+    if (mv && mv.min > 30) warn = '이동 시간이 30분을 넘는 구간이 있어요.';
+    const tag = it.kind === 'store' ? `<span class="tag out">${esc(r.type === 'market' ? '전통시장' : r.type === 'cafe' ? '카페' : '식당')}</span>` : `<span class="tag">${esc(r.indoor ? '실내' : '야외')}</span>`;
+    return `<li class="${c.changed.has(it.ref) ? 'changed' : ''}"><div class="t">${esc(it.time)}</div><div><h3><span class="n">${i + 1}</span>${esc(r.title)}</h3><div class="note">${tag}${esc(r.sub2)} · 약 ${it.dur || r.dur}분</div><div class="r">${esc(it.reason)}</div>${mv ? `<div class="mv">다음 장소까지 ${esc(mv.how)} 약 ${mv.min}분(예상)${gapAfter(it, r, c.items[i + 1], mv) > 45 ? ` · 그 전에 자유 시간 약 ${gapAfter(it, r, c.items[i + 1], mv)}분` : ''}</div>` : ''}${it.kind === 'prog' && r.ev ? `<a href="#festival-${esc(r.ev)}" class="note">행사 정보 보기</a>` : ''}</div></li>`;
+  }).join('');
+  const fb = (() => { try { return localStorage.getItem('fb-' + courseKey(c)); } catch (e) { return null; } })();
+  box.innerHTML = `<div><h2>${esc(fmtDate(c.date))} 코스</h2><p class="note">${esc(COMP[c.cond.companions] || '')} · ${esc((c.cond.interests || []).map(i => CAT[i]).join(', '))} · ${esc(TRANS[mode])} 기준${c.history ? '' : ''}</p>${warn ? `<p class="warn">${warn}</p>` : ''}</div>
+  <div class="mapbox"><svg id="courseMap" viewBox="0 0 600 600" role="img" aria-label="코스 동선 지도"></svg></div>
+  <ol class="tl">${lis}</ol>
+  <div class="actions"><button type="button" id="undoBtn" ${state.history.length ? '' : 'disabled'}>이전 코스로 되돌리기</button><button type="button" id="copyBtn">코스 텍스트 복사</button>
+  <button type="button" class="chip" data-fb="up" aria-pressed="${fb === 'up'}">좋아요</button><button type="button" class="chip" data-fb="down" aria-pressed="${fb === 'down'}">별로예요</button></div>
+  <p class="note" id="copyMsg" aria-live="polite">시간·이동 시간은 예상치예요. 방문 전 공식 안내를 확인하세요.</p>`;
+  drawMap($('#courseMap'), rs.map(r => ({ lat: r.lat, lng: r.lng, c: undefined })), true);
+  $('#undoBtn').onclick = () => { if (!state.history.length) return; state.course = state.history.pop(); state.course.changed = new Set(); state.cond = { ...state.course.cond }; renderCond(); renderCourse(); say('a', '이전 코스로 되돌렸어요.'); };
+  $('#copyBtn').onclick = async () => {
+    const txt = `[춘천마이스 AI 내비게이터] ${fmtDate(c.date)} 코스\n` + c.items.map((it, i) => `${it.time} ${i + 1}. ${rs[i].title} (${rs[i].place})`).join('\n');
+    try { await navigator.clipboard.writeText(txt); $('#copyMsg').textContent = '코스를 복사했어요. 단톡방에 붙여 넣어 공유하세요.'; } catch (e) { $('#copyMsg').textContent = '복사가 막혀 있어요. 아래 내용을 직접 선택해 복사하세요:\n' + txt; }
+  };
+  box.querySelectorAll('[data-fb]').forEach(b => b.onclick = () => { try { localStorage.setItem('fb-' + courseKey(c), b.dataset.fb); } catch (e) {} box.querySelectorAll('[data-fb]').forEach(x => x.setAttribute('aria-pressed', x === b)); $('#copyMsg').textContent = '의견 고마워요. 이 브라우저에만 저장돼요(시연용).'; });
+}
+const gapAfter = (it, r, nx, mv) => toMin(nx.time) - (toMin(it.time) + (it.dur || r.dur)) - mv.min;
+const courseKey = c => c.date + c.items.map(i => i.ref).join('');
+
+/* ---------- 축제 목록·상세 ---------- */
+const flt = { period: 'week', cat: null, indoor: false };
+function inPeriod(e) { const end = flt.period === 'today' ? T : flt.period === 'week' ? rel(6) : flt.period === 'month' ? rel(30) : '9999'; return e.start <= end && e.end >= T; }
+function renderFest() {
+  const P = [['today', '오늘'], ['week', '이번 주'], ['month', '한 달'], ['all', '전체']];
+  $('#fPeriod').innerHTML = P.map(([k, l]) => `<button type="button" class="chip" data-p="${k}" aria-pressed="${flt.period === k}">${l}</button>`).join('');
+  $('#fCat').innerHTML = [[null, '모든 분야'], ...Object.entries(CAT)].map(([k, l]) => `<button type="button" class="chip" data-c="${k ?? ''}" aria-pressed="${flt.cat === k}">${l}</button>`).join('');
+  const list = EVENTS.filter(e => inPeriod(e) && (!flt.cat || e.cat.includes(flt.cat)) && (!flt.indoor || e.indoor)).sort((a, b) => (a.end > rel(400)) - (b.end > rel(400)) || a.start.localeCompare(b.start));
+  $('#fList').innerHTML = list.length ? list.map((e, i) => `<a class="card" href="#festival-${e.id}" style="text-decoration:none;color:inherit"><div><span class="tag">${i + 1}</span>${e.cat.map(c => `<span class="tag">${CAT[c]}</span>`).join('')}<span class="tag ${e.indoor ? '' : 'out'}">${e.indoor ? '실내' : '야외'}</span></div><h3>${esc(e.name)}</h3><div class="meta">${esc(venueOf(e).name)} · ${e.end > rel(300) ? '상시 운영' : `${esc(fmtDate(e.start))} ~ ${esc(fmtDate(e.end))}`}</div><div>${esc(e.summary)}</div></a>`).join('') : '<div class="empty">조건에 맞는 행사가 없어요. 기간이나 분야를 바꿔 보세요.</div>';
+  drawMap($('#fMap'), list.map(e => venueOf(e)), false);
+  $('#fPeriod').querySelectorAll('button').forEach(b => b.onclick = () => { flt.period = b.dataset.p; renderFest(); });
+  $('#fCat').querySelectorAll('button').forEach(b => b.onclick = () => { flt.cat = b.dataset.c || null; renderFest(); });
+}
+$('#fIndoor').onchange = e => { flt.indoor = e.target.checked; renderFest(); };
+function renderDetail(id) {
+  const e = EV[id]; if (!e) { location.hash = '#festivals'; return; }
+  const v = venueOf(e), days = eventDaysAhead(e, 7);
+  const rows = days.map(([d, ps]) => `<tr><td class="num">${esc(fmtDate(d))}</td><td>${ps.map(p => `${esc(p.name)} <span class="note">${p.flex ? `${toHM(p.from)}~${toHM(p.to)} 자유 입장` : `${toHM(p.from)} 시작 · ${p.dur}분`}${p.target === 'kids' ? ' · 어린이 추천' : p.target === 'adult' ? ' · 성인 대상' : ''}</span>`).join('<br>')}</td></tr>`).join('');
+  const ns = nearStores(v, null, 1.0).slice(0, 6);
+  $('#detail').innerHTML = `<p><a href="#festivals">← 축제·행사 목록</a></p>
+  <div class="detail"><div class="course">
+    <div>${e.cat.map(c => `<span class="tag">${CAT[c]}</span>`).join('')}<span class="tag ${e.indoor ? '' : 'out'}">${e.indoor ? '실내' : '야외'}</span></div>
+    <h1 style="font-size:clamp(28px,4vw,42px)">${esc(e.name)}</h1>
+    <p>${esc(e.summary)}</p>
+    <table><tr><th>장소</th><td>${esc(v.name)}</td></tr><tr><th>기간</th><td>${e.end > rel(300) ? '상시 운영' : `${esc(fmtDate(e.start))} ~ ${esc(fmtDate(e.end))}`}</td></tr><tr><th>요금</th><td>${esc(e.fee)}</td></tr><tr><th>데이터</th><td class="note">시연용 샘플 · 갱신일 ${esc(T)}</td></tr></table>
+    <div class="actions"><button class="primary" type="button" id="planThis">이 행사로 코스 짜기</button></div>
+    <h2 style="margin-top:12px">앞으로 7일 프로그램</h2>
+    <div class="scroll">${rows ? `<table><tr><th>날짜</th><th>프로그램</th></tr>${rows}</table>` : '<p class="note">앞으로 7일 동안 열리는 프로그램이 없어요.</p>'}</div>
+  </div><div class="course">
+    <div class="mapbox"><svg id="dMap" viewBox="0 0 600 600" role="img" aria-label="행사장과 주변 매장 지도"></svg></div>
+    <h3>주변 1km 식당·카페·시장</h3>
+    <ol class="tl">${ns.map((s, i) => `<li><div class="t" style="font-size:16px">${Math.round(km(v, s) * 1000)}m</div><div><h3><span class="n" style="background:var(--lake)">${i + 2}</span>${esc(s.name)}</h3><div class="note">${esc(s.sub)} · ${esc(s.open)}~${esc(s.close)}${s.franchise ? ' · 프랜차이즈' : ''}</div></div></li>`).join('')}</ol>
+    <p class="note">1번은 행사장입니다. 매장 이름은 시연용 가상 데이터예요.</p>
+  </div></div>`;
+  drawMap($('#dMap'), [v, ...ns.map(s => ({ lat: s.lat, lng: s.lng, c: 'var(--lake)' }))], false);
+  $('#planThis').onclick = () => { state.cond.mustEv = e.id; if (e.cat[0]) merge({ interests: [e.cat[0]] }); location.hash = '#chat'; setTimeout(() => go(`${e.name} 포함해서 코스 짜 주세요`), 50); };
+}
+
+/* ---------- 홈 ---------- */
+function renderHome() {
+  const wk = EVENTS.filter(e => e.start <= rel(6) && e.end >= T && e.end < rel(300)).slice(0, 6);
+  $('#weekList').innerHTML = wk.map(e => `<a class="card" href="#festival-${e.id}" style="text-decoration:none;color:inherit"><div>${e.cat.map(c => `<span class="tag">${CAT[c]}</span>`).join('')}</div><h3>${esc(e.name)}</h3><div class="meta">${esc(venueOf(e).name)} · ~${esc(fmtDate(e.end))}</div><div>${esc(e.summary)}</div></a>`).join('');
+  const ex = ['이번 토요일에 아이 둘이랑 차로 가요', '내일 연인이랑 기차 타고 가서 공연이랑 야경 보고 싶어요', '이번 일요일 부모님 모시고 전시랑 막국수'];
+  $('#homeChips').innerHTML = ex.map(x => `<button type="button" class="chip">${esc(x)}</button>`).join('');
+  $('#homeChips').querySelectorAll('button').forEach(b => b.onclick = () => startChat(b.textContent));
+  const demo = { date: nextDow(6), companions: 'family', interests: ['experience'], transport: 'car' };
+  drawMap($('#heroMap'), planRule(demo).map(i => resolve(demo.date, i)).filter(Boolean), true);
+}
+function startChat(q) { location.hash = '#chat'; setTimeout(() => go(q), 50); }
+$('#homeAsk').onsubmit = e => { e.preventDefault(); const q = $('#homeQ').value.trim(); if (q) { $('#homeQ').value = ''; startChat(q); } };
+$('#chatForm').onsubmit = e => { e.preventDefault(); const q = $('#chatQ').value.trim(); if (q && !state.busy) { $('#chatQ').value = ''; go(q); } };
+$('#stopBtn').onclick = () => state.ctl?.abort();
+
+/* ---------- 라우팅 ---------- */
+function route() {
+  const h = location.hash.slice(1) || 'home';
+  const view = h.startsWith('festival-') ? 'detail' : ['home', 'chat', 'festivals'].includes(h) ? h : 'home';
+  document.querySelectorAll('[data-view]').forEach(s => s.hidden = s.id !== 'v-' + view);
+  document.querySelectorAll('.nav a').forEach(a => { if (a.dataset.r === view || (view === 'detail' && a.dataset.r === 'festivals')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  if (view === 'festivals') renderFest();
+  if (view === 'detail') renderDetail(h.slice(9));
+  if (view === 'chat') setTimeout(() => $('#chatQ').focus(), 0);
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+renderHome(); renderCond(); renderCourse(); greet(); route();
+}
+</script>
+</body>
+</html>
